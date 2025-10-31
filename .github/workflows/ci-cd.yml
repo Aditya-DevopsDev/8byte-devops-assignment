@@ -1,55 +1,51 @@
-name: CI/CD Pipeline
+name: CI/CD - 8byte DevOps Assignment
 
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]
   pull_request:
+    branches: [ "main" ]
 
 jobs:
-  build:
+  build-deploy:
     runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install dependencies
-        run: |
-          pip install flask boto3 gunicorn
-
-      - name: Run basic test
-        run: |
-          python -m flask --version
-
-      - name: Build Docker image
-        run: |
-          docker build -t flask-app .
-
-  terraform:
-    runs-on: ubuntu-latest
-    needs: build
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # ---------- Setup Terraform ----------
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
 
+      # ---------- Start LocalStack ----------
+      - name: Start LocalStack
+        run: |
+          docker run -d --name localstack -p 4566:4566 localstack/localstack
+          echo "Waiting for LocalStack to start..."
+          sleep 15
+          curl -s http://localhost:4566/health || echo "LocalStack not ready yet"
+
+      # ---------- Terraform ----------
       - name: Terraform Init
-        run: terraform -chdir=terraform init
-
-      - name: Terraform Validate
-        run: terraform -chdir=terraform validate
+        run: terraform -chdir=terraform init -upgrade
 
       - name: Terraform Plan
         run: terraform -chdir=terraform plan
 
       - name: Terraform Apply
-        if: github.ref == 'refs/heads/main'
         run: terraform -chdir=terraform apply -auto-approve
+
+      # ---------- Docker Build ----------
+      - name: Build Docker image
+        run: docker build -t flask-app .
+
+      # ---------- Run Docker Container ----------
+      - name: Run Flask app
+        run: docker run -d -p 5000:5000 --name flask-app flask-app
+
+      # ---------- Verify Container ----------
+      - name: Check Flask app logs
+        run: docker logs flask-app
