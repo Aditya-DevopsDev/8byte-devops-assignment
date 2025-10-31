@@ -1,0 +1,31 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Docker
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Docker Image
+      run: docker build -t flask-app .
+
+    - name: Run Flask Container
+      run: docker run -d -p 5000:5000 --name flask-app flask-app
+
+    - name: Wait for container startup
+      run: sleep 10
+
+    - name: Test Flask App Response
+      run: |
+        curl -f http://localhost:5000 | grep "Flask app connected"
