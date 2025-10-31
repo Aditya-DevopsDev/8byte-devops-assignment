@@ -19,29 +19,30 @@ jobs:
           DEBUG: 1
           LS_LOG: trace
         options: >-
-          --health-cmd "curl -s http://localhost:4566/health | grep 'running' || exit 1"
+          --health-cmd "curl -s http://localhost:4566/_localstack/health | grep 'running' || exit 1"
           --health-interval 10s
           --health-timeout 10s
-          --health-retries 30
+          --health-retries 60
 
     steps:
-      # Checkout source code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Wait until LocalStack is ready (with retries)
-      - name: Wait for LocalStack
+      - name: Wait for LocalStack readiness
         run: |
           echo "Waiting for LocalStack to be ready..."
           for i in {1..60}; do
-            if curl -s http://localhost:4566/health | grep '"s3": "running"' > /dev/null; then
+            HEALTH=$(curl -s http://localhost:4566/_localstack/health || true)
+            echo "$HEALTH"
+            if echo "$HEALTH" | grep -q '"s3": "running"'; then
               echo "✅ LocalStack is ready!"
               exit 0
             fi
-            echo "Still waiting... ($i)"
-            sleep 5
+            echo "⏳ Still waiting... ($i/60)"
+            sleep 10
           done
-          echo "❌ LocalStack failed to start in time."
+          echo "❌ LocalStack failed to start."
+          docker ps -a
           docker logs $(docker ps -aqf "ancestor=localstack/localstack")
           exit 1
 
@@ -55,15 +56,16 @@ jobs:
         working-directory: ./terraform
         run: terraform init -upgrade
 
-      # Retry Terraform apply in case of LocalStack timing issues
-      - name: Terraform Apply with Retry
+      - name: Terraform Apply (with retry)
         working-directory: ./terraform
         run: |
-          for attempt in {1..3}; do
-            echo "Attempt $attempt: Applying Terraform..."
-            terraform apply -auto-approve && break || sleep 10
-            if [ $attempt -eq 3 ]; then
-              echo "Terraform failed after 3 attempts"
+          for i in {1..3}; do
+            terraform apply -auto-approve && break || {
+              echo "Terraform failed on attempt $i, retrying in 15s..."
+              sleep 15
+            }
+            if [ $i -eq 3 ]; then
+              echo "❌ Terraform failed after 3 retries"
               exit 1
             fi
           done
@@ -71,6 +73,12 @@ jobs:
       - name: Terraform Outputs
         working-directory: ./terraform
         run: terraform output
+
+      # ✅ Verify the bucket exists in LocalStack
+      - name: Verify S3 Bucket in LocalStack
+        run: |
+          echo "Listing S3 buckets in LocalStack..."
+          awslocal s3 ls || (echo "❌ Failed to list buckets" && exit 1)
 
       # Docker build and test
       - name: Set up Docker Buildx
@@ -88,9 +96,9 @@ jobs:
       - name: Test Flask App
         run: |
           echo "Testing Flask app..."
-          curl -f http://localhost:5000 || (echo "Flask app failed to respond!" && exit 1)
+          curl -f http://localhost:5000 || (echo "Flask app failed!" && exit 1)
 
-      # Clean up Terraform resources
+      # Terraform cleanup
       - name: Terraform Destroy
         working-directory: ./terraform
         run: terraform destroy -auto-approve
