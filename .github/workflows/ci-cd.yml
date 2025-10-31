@@ -1,5 +1,4 @@
-@"
-name: Full DevOps Automation - Docker + Terraform + LocalStack
+﻿name: Full DevOps Automation - Docker + Terraform + LocalStack
 
 on:
   workflow_dispatch:
@@ -35,11 +34,13 @@ jobs:
           for i in {1..30}; do
             if curl -s http://localhost:4566/_localstack/health | grep '"s3": "running"' > /dev/null; then
               echo "✅ LocalStack is ready!"
-              break
+              exit 0
             fi
-            echo "Still waiting... (\$i)"
+            echo "Still waiting... ()"
             sleep 5
           done
+          echo "❌ LocalStack failed to start in time."
+          exit 1
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
@@ -80,4 +81,3 @@ jobs:
       - name: Terraform Destroy
         working-directory: ./terraform
         run: terraform destroy -auto-approve
-"@ | Set-Content "$env:USERPROFILE\Desktop\8byte-devops-assignment\.github\workflows\ci-cd.yml"
