@@ -1,10 +1,11 @@
-@'
+@"
 name: Full DevOps Automation - Docker + Terraform + LocalStack
 
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
   full-pipeline:
@@ -28,7 +29,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 🕓 Wait until LocalStack is ready
       - name: Wait for LocalStack
         run: |
           echo "Waiting for LocalStack to be ready..."
@@ -37,11 +37,10 @@ jobs:
               echo "✅ LocalStack is ready!"
               break
             fi
-            echo "Still waiting... ($i)"
+            echo "Still waiting... (\$i)"
             sleep 5
           done
 
-      # Terraform setup
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
@@ -63,7 +62,6 @@ jobs:
         working-directory: ./terraform
         run: terraform output
 
-      # Docker build and test
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -79,8 +77,7 @@ jobs:
       - name: Test Flask App
         run: curl -f http://localhost:5000
 
-      # Clean up
       - name: Terraform Destroy
         working-directory: ./terraform
         run: terraform destroy -auto-approve
-'@ | Set-Content "$env:USERPROFILE\Desktop\8byte-devops-assignment\.github\workflows\ci-cd.yml"
+"@ | Set-Content "$env:USERPROFILE\Desktop\8byte-devops-assignment\.github\workflows\ci-cd.yml"
